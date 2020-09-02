@@ -102,7 +102,7 @@ export function showChangelog() {
 /**
  * Remove Markdown syntax (bold, italic, links etc.) in a heading.
  * This function is only used before the `slugify` function.
- * 
+ *
  * A Markdown heading may contain Markdown styles, e.g. `_italic_`.
  * It can also have HTML tags, e.g. `<code>`.
  * They should not be passed to the `slugify` function.
@@ -140,11 +140,11 @@ function mdHeadingToPlaintext(text: string) {
 
 /**
  * Get plaintext from a HTML string
- * 
+ *
  * 1. Convert HTML entities (#175, #575)
  * 2. Strip HTML tags (#179)
- * 
- * @param html 
+ *
+ * @param html
  */
 function getTextInHtml(html: string) {
     //// HTML entities
@@ -181,17 +181,52 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
 
     let slug = mdHeadingToPlaintext(heading.trim());
 
-    if (mode === 'github') {
+    switch (mode) {
+        case 'github':
+            slug = slugifyMethods.github(slug);
+            break;
+
+        case 'gitea':
+            slug = slugifyMethods.gitea(slug);
+            break;
+
+        case 'gitlab':
+            slug = slugifyMethods.gitlab(slug);
+            break;
+
+        case 'vscode':
+            slug = slugifyMethods.vscode(slug);
+            break;
+
+        default:
+            slug = slugifyMethods.github(slug);
+            break;
+    }
+
+    if (downcase) {
+        slug = slug.toLowerCase()
+    }
+
+    return slug;
+}
+
+/**
+ * Slugify methods.
+ *
+ * The keys are slugify modes.
+ * The values are corresponding slugify functions, whose signature must be `(slug: string) => string`.
+ */
+const slugifyMethods = {
+    "github": (slug: string): string => {
         // GitHub slugify function
         // <https://github.com/jch/html-pipeline/blob/master/lib/html/pipeline/toc_filter.rb>
         slug = slug.replace(PUNCTUATION_REGEXP, '')
             // .replace(/[A-Z]/g, match => match.toLowerCase()) // only downcase ASCII region
             .replace(/ /g, '-');
 
-        if (downcase) {
-            slug = slug.toLowerCase()
-        }
-    } else if (mode === 'gitea') {
+        return slug;
+    },
+    "gitea": (slug: string): string => {
         // Gitea uses the blackfriday parser
         // https://godoc.org/github.com/russross/blackfriday#hdr-Sanitized_Anchor_Names
         slug = slug.replace(PUNCTUATION_REGEXP, '-')
@@ -201,10 +236,9 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
             .filter(Boolean)
             .join('-');
 
-        if (downcase) {
-            slug = slug.toLowerCase()
-        }
-    } else if (mode === 'gitlab') {
+        return slug;
+    },
+    "gitlab": (slug: string): string => {
         // GitLab slugify function, translated to JS
         // <https://gitlab.com/gitlab-org/gitlab/blob/master/lib/banzai/filter/table_of_contents_filter.rb#L32>
         // Some bits from their other slugify function
@@ -218,10 +252,9 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
             // digits-only hrefs conflict with issue refs
             .replace(/^(\d+)$/, 'anchor-$1');
 
-        if (downcase) {
-            slug = slug.toLowerCase();
-        }
-    } else {
+        return slug;
+    },
+    "vscode": (slug: string): string => {
         // VSCode slugify function
         // <https://github.com/Microsoft/vscode/blob/f5738efe91cb1d0089d3605a318d693e26e5d15c/extensions/markdown-language-features/src/slugify.ts#L22-L29>
         slug = encodeURI(
@@ -231,10 +264,6 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
                 .replace(/\-+$/, '') // Remove trailing -
         );
 
-        if (downcase) {
-            slug = slug.toLowerCase()
-        }
+        return slug;
     }
-
-    return slug;
-}
+};
