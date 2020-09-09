@@ -100,6 +100,7 @@ export function showChangelog() {
    └─────────────────┘ */
 
 /**
+ * Convert Markdown to plain text.
  * Remove Markdown syntax (bold, italic, links etc.) in a heading.
  * This function is only used before the `slugify` function.
  *
@@ -107,36 +108,51 @@ export function showChangelog() {
  * It can also have HTML tags, e.g. `<code>`.
  * They should not be passed to the `slugify` function.
  *
- * What this function actually does:
- * 1. (Escape syntax like `1.`)
- * 2. `md.render(text)`
- * 3. `getTextInHtml(text)`
- * 4. (Unescape)
+ * The keys are slugify modes.
+ * The values are corresponding conversion methods, whose signature must be `(text: string) => string`.
  *
  * @param text A Markdown heading
  */
-function mdHeadingToPlaintext(text: string) {
-    //// Issue #515
-    text = text.replace(/\[([^\]]*)\]\[[^\]]*\]/, (_, g1) => g1);
-    //// Escape leading `1.` and `1)` (#567, #585)
-    text = text.replace(/^([\d]+)(\.)/, (_, g1) => g1 + '%dot%');
-    text = text.replace(/^([\d]+)(\))/, (_, g1) => g1 + '%par%');
-    //// Escape math environment
-    text = text.replace(/\$/g, '%dollar%');
+const mdHeadingToPlaintext = {
+    /**
+     * What this function actually does:
+     * 1. (Escape syntax like `1.`)
+     * 2. `md.render(text)`
+     * 3. `getTextInHtml(text)`
+     * 4. (Unescape)
+     */
+    "legacy": (text: string): string => {
+        //// Issue #515
+        text = text.replace(/\[([^\]]*)\]\[[^\]]*\]/, (_, g1) => g1);
+        //// Escape leading `1.` and `1)` (#567, #585)
+        text = text.replace(/^([\d]+)(\.)/, (_, g1) => g1 + '%dot%');
+        text = text.replace(/^([\d]+)(\))/, (_, g1) => g1 + '%par%');
+        //// Escape math environment
+        text = text.replace(/\$/g, '%dollar%');
 
-    if (!mdEngine.cacheMd) {
+        if (!mdEngine.cacheMd) {
+            return text;
+        }
+
+        const html = mdEngine.cacheMd.render(text).replace(/\r?\n$/, '');
+        text = getTextInHtml(html);
+
+        //// Unescape
+        text = text.replace('%dot%', '.');
+        text = text.replace('%par%', ')');
+        text = text.replace(/%dollar%/g, '$');
+        return text;
+    },
+
+    /**
+     * CommonMark-compliant.
+     * Assuming the input string is in pure CommonMark.
+     */
+    "commonMark": (text: string): string => {
+        // WIP
         return text;
     }
-
-    const html = mdEngine.cacheMd.render(text).replace(/\r?\n$/, '');
-    text = getTextInHtml(html);
-
-    //// Unescape
-    text = text.replace('%dot%', '.');
-    text = text.replace('%par%', ')');
-    text = text.replace(/%dollar%/g, '$');
-    return text;
-}
+};
 
 /**
  * Get plaintext from a HTML string
@@ -182,7 +198,13 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
         downcase = workspace.getConfiguration('markdown.extension.toc').get<boolean>('downcaseLink');
     }
 
-    let slug = mdHeadingToPlaintext(heading.trim());
+    let slug = heading.trim();
+
+    switch (mode) {
+        default:
+            slug = mdHeadingToPlaintext.legacy(slug); // ! Change to "commonMark" once it's finished!
+            break;
+    }
 
     // Case conversion must be performed before calling slugify function.
     // Because some slugify functions encode strings in their own way.
