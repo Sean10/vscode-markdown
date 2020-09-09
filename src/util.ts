@@ -167,8 +167,11 @@ function getTextInHtml(html: string) {
    │ Slugify │
    └─────────┘ */
 
-// Converted from `/[^\p{Word}\- ]/u`
+// Converted from Ruby regular expression `/[^\p{Word}\- ]/u`
 // `\p{Word}` => ASCII plus Letter (Ll/Lm/Lo/Lt/Lu), Mark (Mc/Me/Mn), Number (Nd/Nl/No), Connector_Punctuation (Pc)
+/**
+ * The definition of punctuation from GitHub and GitLab.
+ */
 const PUNCTUATION_REGEXP = /[^\p{L}\p{M}\p{N}\p{Pc}\- ]/gu;
 
 export function slugify(heading: string, mode?: string, downcase?: boolean) {
@@ -180,6 +183,12 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
     }
 
     let slug = mdHeadingToPlaintext(heading.trim());
+
+    // Case conversion must be performed before calling slugify function.
+    // Because some slugify functions encode strings in their own way.
+    if (downcase) {
+        slug = slug.toLowerCase()
+    }
 
     switch (mode) {
         case 'github':
@@ -201,10 +210,6 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
         default:
             slug = slugifyMethods.github(slug);
             break;
-    }
-
-    if (downcase) {
-        slug = slug.toLowerCase()
     }
 
     return slug;
