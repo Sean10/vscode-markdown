@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { commands, Position, Range, TextDocument, TextEditor, Uri, workspace } from 'vscode';
 import localize from './localize';
 import { mdEngine } from './markdownEngine';
+import { decodeHTML } from 'entities';
 
 /* ┌────────┐
    │ Others │
@@ -108,7 +109,7 @@ export function showChangelog() {
  * It can also have HTML tags, e.g. `<code>`.
  * They should not be passed to the `slugify` function.
  *
- * The keys are slugify modes.
+ * The keys are modes, sometimes the same name as slugify modes.
  * The values are corresponding conversion methods, whose signature must be `(text: string) => string`.
  *
  * @param text A Markdown heading
@@ -134,7 +135,7 @@ const mdHeadingToPlaintext = {
             return text;
         }
 
-        const html = mdEngine.cacheMd.render(text).replace(/\r?\n$/, '');
+        const html = mdEngine.cacheMd.renderInline(text).replace(/\r?\n$/, '');
         text = getTextInHtml(html);
 
         //// Unescape
@@ -163,18 +164,17 @@ const mdHeadingToPlaintext = {
  * @param html
  */
 function getTextInHtml(html: string) {
-    //// HTML entities
-    let text = html.replace(/(&emsp;)/g, _ => ' ')
-        .replace(/(&quot;)/g, _ => '"')
-        .replace(/(&lt;)/g, _ => '<')
-        .replace(/(&gt;)/g, _ => '>')
-        .replace(/(&amp;)/g, _ => '&');
+    let text = html;
     //// remove <!-- HTML comments -->
     text = text.replace(/(<!--[^>]*?-->)/g, '');
     //// remove HTML tags
     while (/<(span|em|strong|a|p|code|kbd)[^>]*>(.*?)<\/\1>/.test(text)) {
         text = text.replace(/<(span|em|strong|a|p|code|kbd)[^>]*>(.*?)<\/\1>/g, (_, _g1, g2) => g2)
     }
+
+    //// Decode HTML entities.
+    text = decodeHTML(text);
+
     text = text.replace(/ +/g, ' ');
     return text;
 }
@@ -200,29 +200,24 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
 
     let slug = heading.trim();
 
-    switch (mode) {
-        default:
-            slug = mdHeadingToPlaintext.legacy(slug); // ! Change to "commonMark" once it's finished!
-            break;
-    }
-
     // Case conversion must be performed before calling slugify function.
     // Because some slugify functions encode strings in their own way.
     if (downcase) {
         slug = slug.toLowerCase()
     }
 
+    // Sort by popularity.
     switch (mode) {
         case 'github':
             slug = slugifyMethods.github(slug);
             break;
 
-        case 'gitea':
-            slug = slugifyMethods.gitea(slug);
-            break;
-
         case 'gitlab':
             slug = slugifyMethods.gitlab(slug);
+            break;
+
+        case 'gitea':
+            slug = slugifyMethods.gitea(slug);
             break;
 
         case 'vscode':
@@ -243,16 +238,23 @@ export function slugify(heading: string, mode?: string, downcase?: boolean) {
  * The keys are slugify modes.
  * The values are corresponding slugify functions, whose signature must be `(slug: string) => string`.
  */
-const slugifyMethods = {
+const slugifyMethods: { [mode: string]: (text: string) => string; } = {
+    /**
+     * GitHub slugify function
+     */
     "github": (slug: string): string => {
-        // GitHub slugify function
         // <https://github.com/jch/html-pipeline/blob/master/lib/html/pipeline/toc_filter.rb>
+        slug = mdHeadingToPlaintext.legacy(slug);
         slug = slug.replace(PUNCTUATION_REGEXP, '')
             // .replace(/[A-Z]/g, match => match.toLowerCase()) // only downcase ASCII region
             .replace(/ /g, '-');
 
         return slug;
     },
+
+    /**
+     * Gitea
+     */
     "gitea": (slug: string): string => {
         // Gitea uses the blackfriday parser
         // https://godoc.org/github.com/russross/blackfriday#hdr-Sanitized_Anchor_Names
@@ -265,6 +267,10 @@ const slugifyMethods = {
 
         return slug;
     },
+
+    /**
+     * GitLab
+     */
     "gitlab": (slug: string): string => {
         // GitLab slugify function, translated to JS
         // <https://gitlab.com/gitlab-org/gitlab/blob/master/lib/banzai/filter/table_of_contents_filter.rb#L32>
@@ -281,8 +287,11 @@ const slugifyMethods = {
 
         return slug;
     },
+
+    /**
+     * Visual Studio Code
+     */
     "vscode": (slug: string): string => {
-        // VSCode slugify function
         // <https://github.com/Microsoft/vscode/blob/f5738efe91cb1d0089d3605a318d693e26e5d15c/extensions/markdown-language-features/src/slugify.ts#L22-L29>
         slug = encodeURI(
             slug.replace(/\s+/g, '-') // Replace whitespace with -
