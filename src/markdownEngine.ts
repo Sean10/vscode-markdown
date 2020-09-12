@@ -2,13 +2,14 @@
 
 import { extensions, workspace, WorkspaceConfiguration } from 'vscode';
 import { slugify } from './util';
-import { MarkdownContribution, MarkdownContributionProvider, getMarkdownContributionProvider } from './markdownExtensions'
+import { MarkdownContribution, MarkdownContributionProvider, getMarkdownContributionProvider } from './markdownExtensions';
+import MarkdownIt = require('markdown-it');
 
 // extensions that treat specially
 export const extensionBlacklist = new Set<string>(["vscode.markdown-language-features", "yzhang.markdown-all-in-one"]);
 
 class MarkdownEngine {
-    public cacheMd;
+    public cacheMd: MarkdownIt;
 
     public async getEngine() {
         if (!this.cacheMd) {
@@ -33,7 +34,7 @@ class MarkdownEngine {
     }
 
     private async newEngine() {
-        let md;
+        let md: MarkdownIt;
 
         const hljs = await import('highlight.js');
         const mdtl = await import('markdown-it-task-lists');
@@ -59,8 +60,8 @@ class MarkdownEngine {
                 return `<code><div>${md.utils.escapeHtml(str)}</div></code>`;
             }
         });
-        
-        // contributions provided by this extension must be processed specially, 
+
+        // contributions provided by this extension must be processed specially,
         // since this extension may not finish activing when a engine is needed to be created.
         md.use(mdtl).use(mdkt, katexOptions);
 
@@ -79,7 +80,7 @@ class MarkdownEngine {
     }
 
     public async render(text: string, config: WorkspaceConfiguration): Promise<string> {
-        const md = await this.getEngine();
+        const md: MarkdownIt = await this.getEngine();
 
         md.set({
             breaks: config.get<boolean>('breaks', false),
@@ -91,7 +92,7 @@ class MarkdownEngine {
         return md.render(text);
     }
 
-    private addNamedHeaders(md: any): void {
+    private addNamedHeaders(md: MarkdownIt): void {
         const originalHeadingOpen = md.renderer.rules.heading_open;
 
         md.renderer.rules.heading_open = function (tokens, idx, options, env, self) {
@@ -111,7 +112,7 @@ class MarkdownEngine {
             if (originalHeadingOpen) {
                 return originalHeadingOpen(tokens, idx, options, env, self);
             } else {
-                return self.renderToken(tokens, idx, options, env, self);
+                return self.renderToken(tokens, idx, options);
             }
         };
     }
